@@ -6,15 +6,20 @@ import requests
 BASE_URL = "https://www.poewiki.net/w/api.php?action=cargoquery&format=json"
 
 cargo = {
-    'tables':'items,item_stats,mods',
-    'join_on':'items._pageName=item_stats._pageName, item_stats.mod_id=mods.id ',
-    'fields':'items.name, mods.stat_text_raw, ROUND(AVG(item_stats.min),0)=min_avg, ROUND(AVG(item_stats.max),0)=max_avg',
-    'where': 'items.rarity="Unique" AND items.is_corrupted=False AND items.drop_enabled=True',
-    'group_by':'mods.stat_text_raw,items.name',
-    'having':'max_avg-min_avg <> 0',
+    'tables':'items', # item_stats,mods', с модами
+    # 'join_on':'items._pageName=item_stats._pageName, item_stats.mod_id=mods.id ', с модами
+    'fields':'items.name,items.class,COUNT(items.name)=count', # mods.stat_text_raw', ROUND(AVG(item_stats.min),0)=min_avg, ROUND(AVG(item_stats.max),0)=max_avg моды
+    'where': 'items.rarity="Unique" AND items.is_corrupted=False AND items.drop_enabled=True AND items.class <> "Item Piece"',
+    'group_by':'items.name,items.class',
+    # 'having':'count=1', ЭТО ДЛЯ УБИРАНИЯ ПОВТОРОВ
+    # 'group_by':'mods.stat_text_raw,items.name', для модов
+    # 'having':'max_avg-min_avg <> 0',для модов
     'order_by':'items.name',
     'limit': '500',
+
 }
+
+
 
 
 
@@ -48,10 +53,10 @@ def parseitems():
 
 def savecsv(items):
 
-    fieldnames=['name','stat text raw','min_avg','max_avg' ]
+    fieldnames=['name','class','count']
     print('Сохраняем!')
 
-    with open('can_div_items.csv', 'w', newline='', encoding='utf-8') as csvfile:
+    with open('only_unique_items.csv', 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
         writer.writeheader()  # writes the header row
