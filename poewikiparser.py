@@ -1,4 +1,4 @@
-import json
+import sqlite3
 import csv
 
 import requests
@@ -10,8 +10,8 @@ cargo = {
     # 'join_on':'items._pageName=item_stats._pageName, item_stats.mod_id=mods.id ', с модами
     'fields':'items.name,items.class,COUNT(items.name)=count', # mods.stat_text_raw', ROUND(AVG(item_stats.min),0)=min_avg, ROUND(AVG(item_stats.max),0)=max_avg моды
     'where': 'items.rarity="Unique" AND items.is_corrupted=False AND items.drop_enabled=True AND items.class <> "Item Piece"',
-    'group_by':'items.name,items.class',
-    # 'having':'count=1', ЭТО ДЛЯ УБИРАНИЯ ПОВТОРОВ
+    'group_by':'items.class,items.name',
+    'having':'count=1', # ЭТО ДЛЯ УБИРАНИЯ ПОВТОРОВ
     # 'group_by':'mods.stat_text_raw,items.name', для модов
     # 'having':'max_avg-min_avg <> 0',для модов
     'order_by':'items.name',
@@ -62,9 +62,53 @@ def savecsv(items):
         writer.writeheader()  # writes the header row
         writer.writerows(items)  # writes all data rows
 
+def saveuniqueitems(items):
+    # Подключаемся к базе данных (или создаём её, если не существует)
+    conn = sqlite3.connect('sqlite3.db')
+    cursor = conn.cursor()
+
+    # Создаём таблицу с нужными полями
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            class TEXT
+        )
+    ''')
+
+    # Очищаем таблицу (опционально, если хотите перезаписывать данные)
+    cursor.execute('DELETE FROM items')
+
+    # Вставляем данные из списка словарей
+    for item in items:
+        cursor.execute('''
+            INSERT INTO items (name, class)
+            VALUES (?, ?)
+        ''', (item['name'], item['class']))
+
+    # Сохраняем изменения и закрываем соединение
+    conn.commit()
+    conn.close()
+    print('Данные сохранены в SQLite!')
 
 
-savecsv(parseitems())
+
+def getuniqueitem():
+    conn = sqlite3.connect('sqlite3.db')
+    cursor = conn.cursor()
+
+    cursor.execute('''SELECT name FROM items WHERE name LIKE "%th's resolve%"''')
+    rows = cursor.fetchall()
+
+    conn.close()
+    return rows
+
+
+# saveuniqueitems(parseitems())
+# savecsv(parseitems())
+
+
+
 
 
 

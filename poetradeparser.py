@@ -1,5 +1,5 @@
 import json
-from http.client import responses
+from poewikiparser import getuniqueitem
 
 import requests
 
@@ -54,18 +54,13 @@ def getmods(name):
     else:
         return print(res.status_code)
 
-    # mod_raw_text = res.json()['result'][0]['item']['explicitMods']  # Текст модов на читабельном языке
-
+    # пул модов со специальными хэшами, которые надо будет потом передавать в POST для поиска с определенными модами и ролами
     explicit_mods_pull = res.json()['result'][0]['item']['extended']['mods'][
-        'explicit']  # пул модов со специальными хэшами, которые надо будет потом передавать в POST для поиска с определенными модами и ролами
+        'explicit']
 
-    explicit_mods_hash = [explicit_mods_pull[i]['magnitudes'][0] for i in range(
-        len(explicit_mods_pull))]  # Собсна список с хэшами и ролами (мин/макс), ВАЖНО!: Почему-то 'magnitudes' идет списком, смысла в этом нет, пока выберем первый элемент
+    # Собсна список с хэшами и ролами (мин/макс), ВАЖНО!: Почему-то 'magnitudes' идет списком, смысла в этом нет, пока выберем первый элемент. СМЫСЛ ЕСТЬ, ТАМ ДЛЯ РОЛЬНЫХ МОДОВ ТИПА ФЛАТОВОГО ДАМАЖА
+    explicit_mods_hash = [explicit_mods_pull[i]['magnitudes'][0] for i in range(len(explicit_mods_pull))]
 
-    # for i, dict in enumerate(explicit_mods_hash): # халявы не будет
-    #     dict['mod_raw_text'] = mod_raw_text[i]
-    #
-    # print(explicit_mods_hash)
 
     response = requests.get(MODS_URL, headers=headers)
     if response.status_code == 200:
@@ -73,15 +68,8 @@ def getmods(name):
     else:
         return print(response.status_code)
 
-    id = 'explicit.stat_3642528642'
-
     all_raw_texts = response.json()['result'][1]['entries']
 
-    # for mod in all_raw_texts:
-    #     if mod['id'] == id:
-    #         return print(mod['text'])
-    #     else:
-    #         pass
 
     for hash_mod in explicit_mods_hash:
         for raw_text in all_raw_texts:
@@ -92,9 +80,9 @@ def getmods(name):
 
     return print(explicit_mods_hash)
 
+a = getuniqueitem()[0][0]
 
-
-getmods(name="bloodplay")
+getmods(name=a)
 
 
 
