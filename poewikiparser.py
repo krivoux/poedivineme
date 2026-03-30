@@ -20,10 +20,6 @@ cargo = {
 }
 
 
-
-
-
-
 def parseitems():
     list_of_items = []
 
@@ -49,8 +45,6 @@ def parseitems():
 
     return list_of_items
 
-
-
 def savecsv(items):
 
     fieldnames=['name','class','count']
@@ -70,9 +64,9 @@ def saveuniqueitems(items):
     # Создаём таблицу с нужными полями
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS items (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT,
-            class TEXT
+            Itemid INTEGER PRIMARY KEY AUTOINCREMENT,
+            Name TEXT,
+            Class TEXT
         )
     ''')
 
@@ -82,7 +76,7 @@ def saveuniqueitems(items):
     # Вставляем данные из списка словарей
     for item in items:
         cursor.execute('''
-            INSERT INTO items (name, class)
+            INSERT INTO items (Name, Class)
             VALUES (?, ?)
         ''', (item['name'], item['class']))
 
@@ -93,12 +87,29 @@ def saveuniqueitems(items):
 
 
 
-def getuniqueitem():
+def getuniqueitem(name=None, limit=None):
     conn = sqlite3.connect('sqlite3.db')
     cursor = conn.cursor()
 
-    cursor.execute('''SELECT name FROM items WHERE name LIKE "%th's resolve%"''')
-    rows = cursor.fetchall()
+    name_pattern = f"%{name}%"
+
+    if name:
+        cursor.execute('''SELECT Name,Itemid
+                          FROM items
+                          WHERE Name LIKE ?''',(name_pattern,))
+        rows = cursor.fetchall()
+    elif limit:
+        cursor.execute('''SELECT Name, Itemid
+                          FROM items LIMIT ?''',(limit,))
+        rows = cursor.fetchall()
+    else:
+        cursor.execute('''SELECT Name, Itemid
+                         FROM items''')
+        rows = cursor.fetchall()
+
+
+
+
 
     conn.close()
     return rows
@@ -107,7 +118,7 @@ def getuniqueitem():
 # saveuniqueitems(parseitems())
 # savecsv(parseitems())
 
-
+# items=print(getuniqueitem(limit=5))
 
 
 
