@@ -1,6 +1,8 @@
 import json
 from time import sleep
+import csv
 
+from poeninjaparser import get_exchange_rate
 from poewikiparser import getuniqueitem
 import sqlite3
 import requests
@@ -9,12 +11,16 @@ BASE_URL = 'https://www.pathofexile.com/api/trade/search/Mirage'
 
 MODS_URL = 'https://www.pathofexile.com/api/trade/data/stats'
 
-
-
-headers = {
-    'user-agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 OPR/128.0.0.0'
+cookies = {
+    'POESESSID':'54d589418fac293f235506487c0369d4'
 }
 
+headers = {
+    'user-agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 OPR/128.0.0.0',
+    'Content-Type':'application/json'
+}
+
+bricked_uniques = []
 
 def getmods(name):
     query = {
@@ -36,7 +42,9 @@ def getmods(name):
         }
     }
 
-    r = requests.post(BASE_URL, json=query, headers=headers)  # Постим наш квери с параметрами поиска
+    r = requests.post(BASE_URL, json=query, headers=headers, cookies=cookies)  # Постим наш квери с параметрами поиска
+    print(f"x-rate-limit-ip-state: {r.headers['x-rate-limit-ip-state']}")
+
 
     if r.status_code == 200:
         pass
@@ -49,7 +57,10 @@ def getmods(name):
     FETCH_URL = 'https://www.pathofexile.com/api/trade/fetch/' + result_string
 
     res = requests.get(FETCH_URL, headers=headers,
-                       params={'query': id_of_result})  # Забираем первые 10 элементов для обработки
+                       params={'query': id_of_result},cookies=cookies)  # Забираем первые 10 элементов для обработки
+    print(f"x-rate-limit-ip-state: {res.headers['x-rate-limit-ip-state']}")
+
+
 
     if res.status_code == 200:
         pass
@@ -63,7 +74,9 @@ def getmods(name):
     explicit_mods_hash = [explicit_mods_pull[i]['magnitudes'][0] for i in range(len(explicit_mods_pull)) if explicit_mods_pull[i]['magnitudes'] is not None]
 
 
-    response = requests.get(MODS_URL, headers=headers)
+    response = requests.get(MODS_URL, headers=headers,cookies=cookies)
+
+
     if response.status_code == 200:
         pass
     else:
@@ -107,9 +120,17 @@ def savemods():
 
     # Вставляем данные из списка словарей
     for item in list_of_items:
+
         print(f"Собираем моды для {item[0]}")
-        sleep(1)
-        mods = getmods(item[0])
+        sleep(5.1)
+
+
+
+        try:
+            mods = getmods(item[0])
+        except KeyError:
+            bricked_uniques.append({'name':item[0]})
+
         for mod in mods:
             cursor.execute('''
                            INSERT INTO mods (hash, min, max, raw_text, Itemid)
@@ -125,20 +146,40 @@ def getprice():
     conn = sqlite3.connect('sqlite3.db')
     cursor = conn.cursor()
 
-    cursor.execute('''select id,name,hash,min,max from items JOIN mods ON items.Itemid = mods.Itemid where min-max <> 0 limit 1''',)
+    try:
+        conn.execute("ALTER TABLE mods ADD COLUMN bo_price INTEGER")
+        conn.execute("ALTER TABLE mods ADD COLUMN minroll_price INTEGER")
+        conn.execute("ALTER TABLE mods ADD COLUMN maxroll_price INTEGER")
+        conn.commit()
+    except sqlite3.OperationalError:
+        # Column likely already exists; ignore the error
+        pass
+
+    cursor.execute('''select id,name,hash,min,max from mods JOIN items ON mods.Itemid = items.Itemid where min-max <> 0 and name like "%Olroth's Resolve%" limit 1''',) # запрос неправильно написан, надо моды брать все а имя одно, а не наоборот
     rows = cursor.fetchall()
-    # print(rows[0])
+    print(rows[0])
+
+    exchange_rate = get_exchange_rate()
 
     for row in rows:
-        for value in range(row[3], row[4]+1):
 
-            mod_filters = [{
-                "id":row[2],
-                "value":{"min": value},
-                "disabled":False
-            }]
 
-            # print(mod_filters)
+
+        for status,value,col_name in [(True,0,'bo_price'),(False,row[3], 'minroll_price'),(False,row[4],'maxroll_price')]: # ну сука хитер
+            sleep(4)
+
+            mod_filters = [
+                {
+                    "id": row[2],
+                    "value": {
+                        "min": value,
+                        "max": value
+                    },
+                    "disabled": status
+                }
+            ]
+
+            print(mod_filters)
 
             query = {
                 "query": {
@@ -150,8 +191,14 @@ def getprice():
                     "stats": [
                         {
                             "type": "and",
-                            "filters": mod_filters # id: "explicit.stat_4080418644", value: {min: 20}, disabled: false ''' ФОРМАТ ЗАПИСИ СПИСКА ФИЛЬТРОВ'''
+                            "filters": [] # id: "explicit.stat_4080418644", value: {min: 20}, disabled: false ''' ФОРМАТ ЗАПИСИ СПИСКА ФИЛЬТРОВ'''
+                        },
+                        {
+                            "filters": mod_filters,
+                            "type":"and"
+
                         }
+
                     ]
                 },
                 "sort": {
@@ -159,7 +206,8 @@ def getprice():
                 }
             }
 
-            r = requests.post(BASE_URL, json=query, headers=headers)  # Постим наш квери с параметрами поиска
+            # Постим наш квери с параметрами поиска
+            r = requests.post(BASE_URL, json=query, headers=headers)
 
             if r.status_code == 200:
                 pass
@@ -187,11 +235,36 @@ def getprice():
             prices= [res.json()['result'][i]['listing']['price'] for i in range(10)]
             print(prices)
 
+            prices_in_chaoseq = [listing['amount'] for listing in prices]
+            avg_price = sum(prices_in_chaoseq) / len(prices_in_chaoseq)
+            print(avg_price)
+
+            # Названия столбцов оказывается нельзя передавать через плейсхолдеры, о как
+            cursor.execute(f"UPDATE mods SET {col_name} = ? WHERE id = ?",(avg_price, row[0]))
+
+    conn.commit()
     cursor.close()
     return None
 
+def savebricked():
 
-savemods()
+    fieldnames=['name']
+    print('Сохраняем!')
+
+    with open('bricked_uniques.csv', 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+        writer.writeheader()  # writes the header row
+        writer.writerows(bricked_uniques)  # writes all data rows
+
+
+
+# savemods()
+
+
+getprice()
+
+
 
 
 
