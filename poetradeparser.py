@@ -71,8 +71,15 @@ def getmods(name):
     explicit_mods_pull = res.json()['result'][0]['item']['extended']['mods']['explicit']
 
     # Собсна список с хэшами и ролами (мин/макс), ВАЖНО!: Почему-то 'magnitudes' идет списком, смысла в этом нет, пока выберем первый элемент. СМЫСЛ ЕСТЬ, ТАМ ДЛЯ РОЛЬНЫХ МОДОВ ТИПА ФЛАТОВОГО ДАМАЖА
-    explicit_mods_hash = [explicit_mods_pull[i]['magnitudes'][0] for i in range(len(explicit_mods_pull)) if explicit_mods_pull[i]['magnitudes'] is not None]
+    explicit_mods_hash = [explicit_mods_pull[i]['magnitudes'] for i in range(len(explicit_mods_pull)) if explicit_mods_pull[i]['magnitudes'] is not None]
 
+    # Обработка магнитуд аля # to # fire damage, если будет три #, то гг
+    for mod in explicit_mods_hash:
+        if len(mod) > 1:
+            mod[0]['min'] = (float(mod[0]['min']) + float(mod[1]['min']))/2
+            mod[0]['max'] = (float(mod[0]['max']) + float(mod[1]['max']))/2
+            mod.pop()
+        else: pass
 
     response = requests.get(MODS_URL, headers=headers,cookies=cookies)
 
@@ -87,8 +94,8 @@ def getmods(name):
 
     for hash_mod in explicit_mods_hash:
         for raw_text in all_raw_texts:
-            if raw_text['id'] == hash_mod['hash']:
-                hash_mod['raw_text'] = raw_text['text']
+            if raw_text['id'] == hash_mod[0]['hash']:
+                hash_mod[0]['raw_text'] = raw_text['text']
             else:pass
 
 
@@ -122,7 +129,7 @@ def savemods():
     for item in list_of_items:
 
         print(f"Собираем моды для {item[0]}")
-        sleep(5.1)
+        sleep(3.2)
 
 
 
@@ -135,7 +142,7 @@ def savemods():
             cursor.execute('''
                            INSERT INTO mods (hash, min, max, raw_text, Itemid)
                            VALUES (?, ?, ?, ?, ?)
-                           ''', (mod['hash'], mod['min'], mod['max'], mod['raw_text'], item[1]))
+                           ''', (mod[0]['hash'], mod[0]['min'], mod[0]['max'], mod[0]['raw_text'], item[1]))
         print('Успех!')
     # Сохраняем изменения и закрываем соединение
     conn.commit()
@@ -155,18 +162,20 @@ def getprice():
         # Column likely already exists; ignore the error
         pass
 
-    cursor.execute('''select id,name,hash,min,max from mods JOIN items ON mods.Itemid = items.Itemid where min-max <> 0 and name like "%Olroth's Resolve%" limit 1''',) # запрос неправильно написан, надо моды брать все а имя одно, а не наоборот
+    cursor.execute('''select id,name,hash,min,max,raw_text from mods JOIN items ON mods.Itemid = items.Itemid where min-max <> 0''',)
     rows = cursor.fetchall()
-    print(rows[0])
+    # print(rows[0])
 
     exchange_rate = get_exchange_rate()
 
+
+    # ну сука хитер
     for row in rows:
+        print(f"Собираем цены для {row[1]}, Мод: {row[-1]}, id: {row[2]} ")
+        for status,value,col_name in [(True,0,'bo_price'),(False,row[3], 'minroll_price'),(False,row[4],'maxroll_price')]:
+            print(f"Собираем {col_name}")
 
-
-
-        for status,value,col_name in [(True,0,'bo_price'),(False,row[3], 'minroll_price'),(False,row[4],'maxroll_price')]: # ну сука хитер
-            sleep(4)
+            sleep(0.5)
 
             mod_filters = [
                 {
@@ -179,7 +188,7 @@ def getprice():
                 }
             ]
 
-            print(mod_filters)
+            # print(mod_filters)
 
             query = {
                 "query": {
@@ -207,12 +216,15 @@ def getprice():
             }
 
             # Постим наш квери с параметрами поиска
-            r = requests.post(BASE_URL, json=query, headers=headers)
+            r = requests.post(BASE_URL, json=query, headers=headers,cookies=cookies)
+
 
             if r.status_code == 200:
-                pass
+                print(f"x-rate-limit-ip-state: {r.headers['x-rate-limit-ip-state']}")
             else:
                 return print(r.status_code)
+
+
 
             # Получаем наши параметры для получения результатов поиска
             id_of_result = r.json()['id']
@@ -223,24 +235,25 @@ def getprice():
             FETCH_URL = 'https://www.pathofexile.com/api/trade/fetch/' + result_string
 
             # Забираем первые 10 элементов для обработки
-            res = requests.get(FETCH_URL, headers=headers, params={'query': id_of_result})
+            res = requests.get(FETCH_URL, headers=headers, params={'query': id_of_result}, cookies=cookies)
+
 
             if res.status_code == 200:
-                pass
+                print(f"x-rate-limit-ip-state: {res.headers['x-rate-limit-ip-state']}")
             else:
                 return print(res.status_code)
 
 
-
             prices= [res.json()['result'][i]['listing']['price'] for i in range(10)]
-            print(prices)
+            # print(prices)
 
-            prices_in_chaoseq = [listing['amount'] for listing in prices]
+            prices_in_chaoseq = [listing['amount']*exchange_rate[listing['currency']]['chaosEquivalent'] for listing in prices]
             avg_price = sum(prices_in_chaoseq) / len(prices_in_chaoseq)
             print(avg_price)
 
             # Названия столбцов оказывается нельзя передавать через плейсхолдеры, о как
             cursor.execute(f"UPDATE mods SET {col_name} = ? WHERE id = ?",(avg_price, row[0]))
+            print('Успех!')
 
     conn.commit()
     cursor.close()
@@ -259,10 +272,12 @@ def savebricked():
 
 
 
-# savemods()
-
-
+savemods()
+savebricked()
 getprice()
+
+
+
 
 
 
