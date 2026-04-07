@@ -6,6 +6,7 @@ from poeninjaparser import get_exchange_rate
 from poewikiparser import getuniqueitem
 import sqlite3
 import requests
+import numpy as np
 
 BASE_URL = 'https://www.pathofexile.com/api/trade/search/Mirage'
 
@@ -70,7 +71,7 @@ def getmods(name):
     # пул модов со специальными хэшами, которые надо будет потом передавать в POST для поиска с определенными модами и ролами
     explicit_mods_pull = res.json()['result'][0]['item']['extended']['mods']['explicit']
 
-    # Собсна список с хэшами и ролами (мин/макс), ВАЖНО!: Почему-то 'magnitudes' идет списком, смысла в этом нет, пока выберем первый элемент. СМЫСЛ ЕСТЬ, ТАМ ДЛЯ РОЛЬНЫХ МОДОВ ТИПА ФЛАТОВОГО ДАМАЖА
+    # Собираем список модов\хэшей с мин, максами
     explicit_mods_hash = [explicit_mods_pull[i]['magnitudes'] for i in range(len(explicit_mods_pull)) if explicit_mods_pull[i]['magnitudes'] is not None]
 
     # Обработка магнитуд аля # to # fire damage, если будет три #, то гг
@@ -131,6 +132,7 @@ def savemods():
         print(f"Собираем моды для {item[0]}")
         sleep(3.2)
 
+        # TODO: Надо будет сделать retry, если уперся в рейт лимит
 
 
         try:
@@ -162,7 +164,10 @@ def getprice():
         # Column likely already exists; ignore the error
         pass
 
-    cursor.execute('''select id,name,hash,min,max,raw_text from mods JOIN items ON mods.Itemid = items.Itemid where min-max <> 0''',)
+    # query = '''select id,name,hash,min,max,raw_text from mods JOIN items ON mods.Itemid = items.Itemid where maxroll_price-bo_price*(2*(max-min)+1)>=50'''
+    query = '''select id,name,hash,min,max,raw_text from mods JOIN items ON mods.Itemid = items.Itemid where max-min <> 0'''
+
+    cursor.execute(query)
     rows = cursor.fetchall()
     # print(rows[0])
 
@@ -171,24 +176,24 @@ def getprice():
 
     # ну сука хитер
     for row in rows:
+        roll_range = row[4]-row[3]
         print(f"Собираем цены для {row[1]}, Мод: {row[-1]}, id: {row[2]} ")
-        for status,value,col_name in [(True,0,'bo_price'),(False,row[3], 'minroll_price'),(False,row[4],'maxroll_price')]:
+        for status,min_value,max_value,col_name in [(True,0,0,'bo_price'),(False,row[3],row[3]+0.2*roll_range,'minroll_price'),(False,row[4]-0.2*roll_range,row[4],'maxroll_price')]:
             print(f"Собираем {col_name}")
 
-            sleep(0.5)
+            sleep(4)
 
             mod_filters = [
                 {
                     "id": row[2],
                     "value": {
-                        "min": value,
-                        "max": value
+                        "min": min_value,
+                        "max": max_value
                     },
                     "disabled": status
                 }
             ]
 
-            # print(mod_filters)
 
             query = {
                 "query": {
@@ -207,11 +212,21 @@ def getprice():
                             "type":"and"
 
                         }
-
-                    ]
+                    ],
+                    "filters": {
+                        "misc_filters": {
+                            "filters": {
+                                "corrupted": {
+                                    "option": "false"
+                                }
+                            }
+                        }
+                    }
                 },
+
+
                 "sort": {
-                    "price": "asc"
+                    "price": "asc",
                 }
             }
 
@@ -222,7 +237,7 @@ def getprice():
             if r.status_code == 200:
                 print(f"x-rate-limit-ip-state: {r.headers['x-rate-limit-ip-state']}")
             else:
-                return print(r.status_code)
+                r.raise_for_status()
 
 
 
@@ -231,6 +246,8 @@ def getprice():
 
             # Берем пока только 10 элементов, иначе отрыг 400 статус код
             result_string = ','.join(r.json()['result'][0:10])
+            number_of_listings = len(r.json()['result'][0:10])
+
 
             FETCH_URL = 'https://www.pathofexile.com/api/trade/fetch/' + result_string
 
@@ -240,20 +257,23 @@ def getprice():
 
             if res.status_code == 200:
                 print(f"x-rate-limit-ip-state: {res.headers['x-rate-limit-ip-state']}")
+
+                prices = [res.json()['result'][i]['listing']['price'] for i in range(number_of_listings)]
+                # print(prices)
+
+                prices_in_chaoseq = [listing['amount'] * exchange_rate[listing['currency']]['chaosEquivalent'] for
+                                     listing in prices]
+                # avg_price = sum(prices_in_chaoseq) / len(prices_in_chaoseq)
+                # print(avg_price)
+
+                avg_price = np.median(np.array(prices_in_chaoseq))
+                print(avg_price)
+
+                # Названия столбцов оказывается нельзя передавать через плейсхолдеры, о как
+                cursor.execute(f"UPDATE mods SET {col_name} = ? WHERE id = ?", (avg_price, row[0]))
+                print('Успех!')
             else:
-                return print(res.status_code)
-
-
-            prices= [res.json()['result'][i]['listing']['price'] for i in range(10)]
-            # print(prices)
-
-            prices_in_chaoseq = [listing['amount']*exchange_rate[listing['currency']]['chaosEquivalent'] for listing in prices]
-            avg_price = sum(prices_in_chaoseq) / len(prices_in_chaoseq)
-            print(avg_price)
-
-            # Названия столбцов оказывается нельзя передавать через плейсхолдеры, о как
-            cursor.execute(f"UPDATE mods SET {col_name} = ? WHERE id = ?",(avg_price, row[0]))
-            print('Успех!')
+                pass
 
     conn.commit()
     cursor.close()
@@ -271,14 +291,25 @@ def savebricked():
         writer.writerows(bricked_uniques)  # writes all data rows
 
 
-
-savemods()
-savebricked()
+#
+# savemods()
+# savebricked()
 getprice()
 
+def savepricecsv():
+    conn = sqlite3.connect('sqlite3.db')
+    cursor = conn.cursor()
+    cursor.execute('''SELECT items.Itemid, name, mods.id, raw_text, min, max,bo_price,maxroll_price,minroll_price FROM mods JOIN items ON mods.Itemid = items.Itemid''')
+    rows = cursor.fetchall()
+    conn.close()
+    with open('output.csv', 'w', newline='',encoding='utf-8') as f:
+        writer = csv.writer(f)
+        # Use writerows to write the entire list at once
+        writer.writerows(rows)
+    return None
 
 
-
+savepricecsv()
 
 
 

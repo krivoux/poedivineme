@@ -7,14 +7,14 @@ conn = sqlite3.connect('sqlite3.db')
 cursor = conn.cursor()
 
 # cursor.execute('''SELECT name FROM PRAGMA_TABLE_INFO('mods')''') # Названия полей
-# cursor.execute('''SELECT * FROM items''')
+# cursor.execute('''SELECT * FROM items WHERE Itemid = 946''')
 # cursor.execute('''SELECT * FROM mods''')
 # cursor.execute('''SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name''') # чтобы посмотреть таблицы все в БД
 # cursor.execute('''select id,name,hash,min,max from items JOIN mods ON items.Itemid = mods.Itemid where min-max <> 0 ''',) #чтобы посмотреть сколько модов прайсчекать
 # cursor.execute('''select name,hash from items left join mods on items.Itemid = mods.id where name LIKE "%contract%" ''')
 # cursor.execute('''select id,name,class,max-min as range from mods JOIN items ON mods.Itemid = items.Itemid where range <> 0 and range > 100 order by range asc ''',)
-# cursor.execute('''SELECT name, bo_price, minroll_price, maxroll_price from mods JOIN items on mods.Itemid = items.Itemid WHERE name LIKE "%Olroth's Resolve%" AND max-min <> 0''')
-cursor.execute('''SELECT * from mods WHERE hash LIKE "%explicit.stat_1133016593%"''')
+cursor.execute('''SELECT name, bo_price, minroll_price, maxroll_price from mods JOIN items on mods.Itemid = items.Itemid WHERE items.Itemid = 286''')
+# cursor.execute('''SELECT * from mods WHERE hash LIKE "%explicit.stat_1133016593%"''')
 
 
 
