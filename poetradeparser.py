@@ -13,7 +13,7 @@ BASE_URL = 'https://www.pathofexile.com/api/trade/search/Mirage'
 MODS_URL = 'https://www.pathofexile.com/api/trade/data/stats'
 
 cookies = {
-    'POESESSID':'54d589418fac293f235506487c0369d4'
+    'POESESSID':'e48c958c25491790b1a634ef2eb70291'
 }
 
 headers = {
@@ -164,8 +164,8 @@ def getprice():
         # Column likely already exists; ignore the error
         pass
 
-    # query = '''select id,name,hash,min,max,raw_text from mods JOIN items ON mods.Itemid = items.Itemid where maxroll_price-bo_price*(2*(max-min)+1)>=50'''
-    query = '''select id,name,hash,min,max,raw_text from mods JOIN items ON mods.Itemid = items.Itemid where max-min <> 0'''
+    query = '''select id,name,hash,min,max,raw_text from mods JOIN items ON mods.Itemid = items.Itemid where maxroll_price-bo_price*(2*(max-min)+1)>=50'''
+    # query = '''select id,name,hash,min,max,raw_text from mods JOIN items ON mods.Itemid = items.Itemid where max-min <> 0'''
 
     cursor.execute(query)
     rows = cursor.fetchall()
