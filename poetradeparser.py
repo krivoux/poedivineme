@@ -23,6 +23,8 @@ headers = {
 
 bricked_uniques = []
 
+
+# Собирает инфу с PoeTrade о модах КАЖДОГО предмета, соответственно нужно передать имя предмета в аргумент функции
 def getmods(name):
     query = {
         "query": {

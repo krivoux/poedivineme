@@ -4,7 +4,7 @@ import os
 import time
 import networkx as nx
 import matplotlib.pyplot as plt
-
+import datetime
 import requests
 import csv
 import re
@@ -23,9 +23,14 @@ data = {'client_id':'poedivineapp',
            'grant_type':'client_credentials',
            'scope':'service:cxapi'}
 
-next_change_id = str(1774396800-3600*0)
+dt = datetime.datetime.now().replace(microsecond=0,second=0,minute=0)
+unix_now = int(time.mktime(time.strptime(str(dt), '%Y-%m-%d %H:%M:%S')))
+
+hour_step = 1
+
+next_change_id = str(unix_now-3600*hour_step)
 #
-API_uri = 'https://api.pathofexile.com/currency-exchange/poe2/'
+API_uri = 'https://api.pathofexile.com/currency-exchange/'
 
 
 # response = requests.post('https://www.pathofexile.com/oauth/token', headers=headers, data=data)
@@ -33,20 +38,20 @@ API_uri = 'https://api.pathofexile.com/currency-exchange/poe2/'
 # print(response.text)
 
 
-def find_last_change_id():
-    next_change_id = '1776794400'
-    while True:
-        print(next_change_id)
-        response = requests.get(API_uri+str(next_change_id), headers=headers)
-        response.raise_for_status()
-        if response.json()["next_change_id"] != next_change_id:
-            next_change_id = response.json()["next_change_id"]
-        else: break
-    return next_change_id
+# def find_last_change_id():
+#     next_change_id = '1776794400'
+#     while True:
+#         print(next_change_id)
+#         response = requests.get(API_uri+str(next_change_id), headers=headers)
+#         response.raise_for_status()
+#         if response.json()["next_change_id"] != next_change_id:
+#             next_change_id = response.json()["next_change_id"]
+#         else: break
+#     return next_change_id
 
-
-current_league = 'Mirage'
 current_league = 'Fate of the Vaal'
+current_league = 'Mirage'
+
 
 def get_league_markets(league):
     league_markets = []
@@ -60,6 +65,7 @@ def get_league_markets(league):
         else: pass
 
     return league_markets
+
 
 
 def savecsv(items):
@@ -208,11 +214,12 @@ def bellmanford(graph, src):
 
     return reverse_paths,dist
 
-results=bellmanford(graph=cleaned_graph,src='divine')
+# results=bellmanford(graph=cleaned_graph,src='divine')
 
 removed_duplicated = []
 
-
+markets = get_league_markets(current_league)
+print(markets)
 
 for result in results[0]:
     if result not in removed_duplicated:

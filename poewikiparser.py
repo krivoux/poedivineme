@@ -19,7 +19,12 @@ cargo = {
 
 }
 
+proxies = {
+    'http': 'http://154.64.232.35:8080',
+    'https': 'http://154.64.232.35:8080',
+}
 
+# Парсер PoeWiki 1
 def parseitems():
     list_of_items = []
 
@@ -28,7 +33,7 @@ def parseitems():
 
         while True:
             print(f"Проверяем наличие данных на строках с {offset} по {offset+500} ")
-            r = requests.get(BASE_URL, params=cargo | {'offset': offset})
+            r = requests.get(BASE_URL, params=cargo | {'offset': offset}, proxies=proxies)
             if len(r.json()['cargoquery']) != 0:
                 offset += 500
             else:
@@ -45,6 +50,7 @@ def parseitems():
 
     return list_of_items
 
+# Сохранялка в CSV для просмотра (удобного) результата парсинга
 def savecsv(items):
 
     fieldnames=['name','class','count']
@@ -56,6 +62,8 @@ def savecsv(items):
         writer.writeheader()  # writes the header row
         writer.writerows(items)  # writes all data rows
 
+
+# Функция сохраняет список предметов в БД (создает БД, если ее нет)
 def saveuniqueitems(items):
     # Подключаемся к базе данных (или создаём её, если не существует)
     conn = sqlite3.connect('sqlite3.db')
@@ -86,7 +94,7 @@ def saveuniqueitems(items):
     print('Данные сохранены в SQLite!')
 
 
-
+# Возвращает строки из БД либо с заданным именем, либо просто по кол-ву строк
 def getuniqueitem(name=None, limit=None):
     conn = sqlite3.connect('sqlite3.db')
     cursor = conn.cursor()
@@ -122,7 +130,8 @@ def getuniqueitem(name=None, limit=None):
 
 
 
-
+items = parseitems()
+print(items)
 
 
 
